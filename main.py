@@ -79,7 +79,7 @@ def button(update: Update, context: CallbackContext) -> None:
             context.user_data['points'] += 1
             if context.user_data['points'] == n_questions:
                 total_time = time.time() - context.user_data['start_time']
-                # http: // www.unicode.org / emoji / charts / full - emoji - list.html
+                # http://www.unicode.org/emoji/charts/full-emoji-list.html
                 query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s' % datetime.timedelta(seconds=int(total_time)))
             else:
                 query.message.reply_text('{you have %d points}' % context.user_data['points'])
