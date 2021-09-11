@@ -11,12 +11,14 @@ import logging
 import os
 import random
 import time
+from typing import Optional
+
 from emoji import emojize
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, CallbackQuery, Message
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
-from utils.leader_board import store_result_of_user, get_n_sorted_users_with_min_time
+from utils.leader_board import store_result_of_user, print_n_sorted_users_with_min_time
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -64,7 +66,7 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def button(update: Update, context: CallbackContext) -> None:
     """Parses the CallbackQuery and updates the message text."""
-    query = update.callback_query
+    query: Optional[CallbackQuery] = update.callback_query
 
     # CallbackQueries need to be answered, even if no notification to the user_class is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
@@ -89,7 +91,7 @@ def button(update: Update, context: CallbackContext) -> None:
                 store_result_of_user(update.callback_query.from_user.username, total_time)
                 # http://www.unicode.org/emoji/charts/full-emoji-list.html
                 query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s seconds' % datetime.timedelta(seconds=total_time))
-                query.message.reply_text('Leader board: ' + str(get_n_sorted_users_with_min_time()))
+                print_n_sorted_users_with_min_time(query.message)
             else:
                 query.message.reply_text('{you have %d points}' % context.user_data['points'])
                 get_question_data(context.user_data['category'], query.message, context)

@@ -1,2 +1,2 @@
 python-telegram-bot
-emoji
+emoji~=1.4.2
