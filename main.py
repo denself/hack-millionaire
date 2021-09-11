@@ -16,6 +16,8 @@ from emoji import emojize
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
+from utils.leader_board import store_result_of_user, get_n_sorted_users_with_min_time
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
@@ -64,7 +66,7 @@ def button(update: Update, context: CallbackContext) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
 
-    # CallbackQueries need to be answered, even if no notification to the user is needed
+    # CallbackQueries need to be answered, even if no notification to the user_class is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     query.answer()
     action, value = query.data.split(':')
@@ -83,9 +85,11 @@ def button(update: Update, context: CallbackContext) -> None:
             query.message.reply_text('{correct answer %s}' % value)
             context.user_data['points'] += 1
             if context.user_data['points'] == n_questions:
-                total_time = time.time() - context.user_data['start_time']
+                total_time = int(time.time() - context.user_data['start_time'])
+                store_result_of_user(update.callback_query.from_user.username, total_time)
                 # http://www.unicode.org/emoji/charts/full-emoji-list.html
-                query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s' % datetime.timedelta(seconds=int(total_time)))
+                query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s seconds' % datetime.timedelta(seconds=total_time))
+                query.message.reply_text('Leader board: ' + str(get_n_sorted_users_with_min_time()))
             else:
                 query.message.reply_text('{you have %d points}' % context.user_data['points'])
                 get_question_data(context.user_data['category'], query.message, context)
@@ -145,7 +149,7 @@ def main() -> None:
     # Start the Bot
     updater.start_polling()
 
-    # Run the bot until the user presses Ctrl-C or the process receives SIGINT,
+    # Run the bot until the user_class presses Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT
     updater.idle()
 
