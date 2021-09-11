@@ -11,6 +11,7 @@ import logging
 import os
 import random
 import time
+from emoji import emojize
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
@@ -78,7 +79,8 @@ def button(update: Update, context: CallbackContext) -> None:
             context.user_data['points'] += 1
             if context.user_data['points'] == n_questions:
                 total_time = time.time() - context.user_data['start_time']
-                query.message.reply_text('{you won, your time: %s}' % datetime.timedelta(seconds=int(total_time)))
+                # http: // www.unicode.org / emoji / charts / full - emoji - list.html
+                query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s' % datetime.timedelta(seconds=int(total_time)))
             else:
                 query.message.reply_text('{you have %d points}' % context.user_data['points'])
                 get_question_data(context.user_data['category'], query.message, context)
