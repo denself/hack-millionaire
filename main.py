@@ -25,8 +25,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+j = None
 data_folder = 'data/'
 n_questions = 3
+snoop_tresh = 0.8
 questions = {}
 for folder in os.listdir(data_folder):
     questions[folder] = {}
@@ -35,12 +37,7 @@ for folder in os.listdir(data_folder):
 
 
 def start(update: Update, context: CallbackContext) -> None:
-    keyboard = [
-        [
-            InlineKeyboardButton("Countries", callback_data='category:countries'),
-            InlineKeyboardButton("Fruits", callback_data='category:fruits')
-        ],
-    ]
+    keyboard = [[InlineKeyboardButton("Question [1/10]", callback_data='category:fruits')]]
 
     context.user_data.update({
         'username': update.message.from_user.username,
@@ -51,16 +48,19 @@ def start(update: Update, context: CallbackContext) -> None:
         'correct': None,
         'start_time': None,
         'hints': {
-            '50': '50/50',
-            'snoop': 'Call Snoop',
-            'hint': 'Get Hint'
+            '50': '⚖️50/50',
+            'snoop': '☎️Call',
+            'hint': '🔁 Change'
         }
     })
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    update.message.reply_text(f'{{ Greetings {update.message.from_user.username}, do you want to be a millionaire?}}')
-    update.message.reply_text('{Select Category}', reply_markup=reply_markup)
+    # TODO: replace welcome video; add "Question [1/10]" button
+    with open(os.path.join(data_folder, 'videos', 'win.mp4'), 'rb') as f:
+        update.message.reply_video(f.read(), reply_markup=reply_markup)
+
+    # update.message.reply_text('{Select Category}')
     # update.message.reply_photo(photo=img, reply_markup=reply_markup)
 
 
@@ -79,10 +79,11 @@ def button(update: Update, context: CallbackContext) -> None:
         })
         # query.edit_message_reply_markup()  # text(text=f"Selected option: {query.data}")
         query.delete_message()  # text(text=f"Selected option: {query.data}")
-        query.message.reply_text('{Start game message %s}' % value)
+        query.message.reply_text('Question [1/10]')
         get_question_data(context.user_data['category'], query.message, context)
     elif action == 'answer':
-        query.edit_message_reply_markup()
+        # query.edit_message_reply_markup()
+        query.delete_message()
         if value == context.user_data['correct']:
             query.message.reply_text('{correct answer %s}' % value)
             context.user_data['points'] += 1
@@ -93,10 +94,19 @@ def button(update: Update, context: CallbackContext) -> None:
                 query.message.reply_text(emojize(":party_popper:", use_aliases=True) + ', your time: %s seconds' % datetime.timedelta(seconds=total_time))
                 print_n_sorted_users_with_min_time(query.message)
             else:
-                query.message.reply_text('{you have %d points}' % context.user_data['points'])
+                with open(os.path.join(data_folder, 'videos', 'win.mp4'), 'rb') as f:
+                    # TODO: add button "Question [2/10]"
+                    query.message.reply_video(f.read())
+
                 get_question_data(context.user_data['category'], query.message, context)
+                # TODO: additional video before question 10
+                # TODO: additional video after final answer
+                # TODO: add message "hiring.reface.ai"
         else:
-            query.message.reply_text('{Wrong answer %s, you lost}' % value)
+            with open(os.path.join(data_folder, 'videos', 'wrong.mp4'), 'rb') as f:
+                # TODO: add button "Try Again"
+                keyboard = [[InlineKeyboardButton("Try Again", callback_data='category:fruits')]]
+                query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup(keyboard))
     elif action == 'help':
         if value == '50':
             context.user_data['hints'].pop('50')
@@ -112,12 +122,17 @@ def button(update: Update, context: CallbackContext) -> None:
         elif value == 'snoop':
             context.user_data['hints'].pop('snoop')
             query.edit_message_reply_markup()
+
+            weights = [0.8 if v == context.user_data['correct'] else 0.1 for k, v in context.user_data['options']]
+            hint = random.choices(context.user_data['options'], weights)[0][0]
+            video_name = f'{hint.capitalize()}.mp4'
+
             keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
                                              callback_data=f'answer:{option}') for letter, option in
                         context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
             # hint_name = os.listdir(os.path.join(data_folder, 'hints', 'abcd'))
-            with open('snoop_zvonok.mp4', 'rb') as f:
+            with open(os.path.join(data_folder, 'hints', 'abcd', video_name), 'rb') as f:
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
         elif value == 'hint':
             context.user_data['hints'].pop('hint')
@@ -169,6 +184,8 @@ def main() -> None:
     token = os.getenv('TG_TOKEN')
     assert token, "Telegram token is not provided"
     updater = Updater(token)
+    global j
+    j = updater.job_queue
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
     updater.dispatcher.add_handler(CallbackQueryHandler(button))
