@@ -13,7 +13,7 @@ import random
 import time
 from emoji import emojize
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
 logging.basicConfig(
@@ -45,7 +45,12 @@ def start(update: Update, context: CallbackContext) -> None:
         'category': None,
         'options': None,
         'correct': None,
-        'start_time': None
+        'start_time': None,
+        'hints': {
+            '50': '50/50',
+            'snoop': 'Call Snoop',
+            'hint': 'Get Hint'
+        }
     })
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -86,6 +91,15 @@ def button(update: Update, context: CallbackContext) -> None:
                 get_question_data(context.user_data['category'], query.message, context)
         else:
             query.message.reply_text('{Wrong answer %s, you lost}' % value)
+    elif action == 'help':
+        if value == '50':
+            context.user_data['hints'].pop('50')
+            options = []
+            while context.user_data['correct'] not in options:
+                options = random.sample(context.user_data['options'], 2)
+            keyboard = [[InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}')] for option in options]
+            hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
+            query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([keyboard, hints]))
     else:
         query.message.reply_text('Wrong action')
 
@@ -100,11 +114,16 @@ def get_question_data(category, message, context):
         'correct': correct
     })
     keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in options]
+    hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
+    # reply_keyboard = [['50 / 50', 'Call Snoop', 'Get a Hint']]
+    # message.reply_text(
+    #     'Guess What is it?',
+    #     reply_markup=ReplyKeyboardMarkup(
+    #         reply_keyboard, one_time_keyboard=True, input_field_placeholder='Need Help?'
+    #     ),
+    # )
     with open(category_data[correct], 'rb') as f:
-        message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:]]))
-
-
-
+        message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
 
 
 def help_command(update: Update, context: CallbackContext) -> None:
