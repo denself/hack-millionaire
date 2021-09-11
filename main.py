@@ -100,25 +100,32 @@ def button(update: Update, context: CallbackContext) -> None:
     elif action == 'help':
         if value == '50':
             context.user_data['hints'].pop('50')
-            options = []
-            while context.user_data['correct'] not in options:
+            options = [[None]]
+            while context.user_data['correct'] not in list(zip(*options))[-1]:
                 options = random.sample(context.user_data['options'], 2)
             context.user_data['options'] = options
-            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
+            keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
+                                             callback_data=f'answer:{option}') for letter, option in
+                        sorted(context.user_data['options'])]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
             query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([keyboard[:1], keyboard[1:], hints]))
         elif value == 'snoop':
             context.user_data['hints'].pop('snoop')
             query.edit_message_reply_markup()
-            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
+            keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
+                                             callback_data=f'answer:{option}') for letter, option in
+                        context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
+            # hint_name = os.listdir(os.path.join(data_folder, 'hints', 'abcd'))
             with open('snoop_zvonok.mp4', 'rb') as f:
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
         elif value == 'hint':
             context.user_data['hints'].pop('hint')
             query.edit_message_reply_markup()
 
-            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
+            keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
+                                             callback_data=f'answer:{option}') for letter, option in
+                        context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
             category_data = questions[context.user_data['category']]
             with open(category_data[context.user_data['correct']], 'rb') as f:
@@ -134,10 +141,11 @@ def get_question_data(category, message, context):
 
     correct = options[random.randint(0, 3)]
     context.user_data.update({
-        'options': options,
+        'options': list(zip('abcd', options)),
         'correct': correct
     })
-    keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in options]
+    keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
+                                     callback_data=f'answer:{option}') for letter, option in context.user_data['options']]
     hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
     # reply_keyboard = [['50 / 50', 'Call Snoop', 'Get a Hint']]
     # message.reply_text(
