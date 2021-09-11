@@ -12,7 +12,6 @@ import os
 import random
 from typing import Optional
 
-from emoji import emojize
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
@@ -25,13 +24,8 @@ logger = logging.getLogger(__name__)
 
 j = None
 data_folder = 'data/'
-n_questions = 3
+n_questions = 10
 snoop_tresh = 0.8
-questions = {}
-for folder in os.listdir(data_folder):
-    questions[folder] = {}
-    for filename in os.listdir(os.path.join(data_folder, folder)):
-        questions[folder][filename.rsplit( ".", 1 )[ 0 ]] = os.path.join(data_folder, folder, filename)
 
 with open(os.path.join(data_folder, 'countries', 'questions.csv')) as f:
     questions = list(csv.reader(f, delimiter='\t'))
@@ -39,20 +33,7 @@ with open(os.path.join(data_folder, 'countries', 'questions.csv')) as f:
 
 def start(update: Update, context: CallbackContext) -> None:
 
-    context.user_data.update({
-        'username': update.message.from_user.username,
-        'points': 0,
-        'options': None,
-        'correct': None,
-        'start_time': None,
-        'hints': {
-            '50': '⚖️50/50',
-            'snoop': '☎️Call',
-            'hint': '🔁 Change'
-        }
-    })
-
-    keyboard = [[InlineKeyboardButton("Question [1/10]", callback_data='question:1')]]
+    keyboard = [[InlineKeyboardButton("Question [1/10]", callback_data='question:start')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     with open(os.path.join(data_folder, 'videos', '0-hello.mp4'), 'rb') as f:
@@ -68,32 +49,56 @@ def button(update: Update, context: CallbackContext) -> None:
     query.answer()
     action, value = query.data.split(':')
     if action == 'question':
-        # query.edit_message_reply_markup()  # text(text=f"Selected option: {query.data}")
-        query.delete_message()  # text(text=f"Selected option: {query.data}")
-        query.message.reply_text('Question [1/10]')
+        query.delete_message()
+        if value == 'start':
+            context.user_data.update({
+                'username': query.message.from_user.username,
+                'points': 0,
+                'options': None,
+                'correct': None,
+                'hints': {
+                    '50': '⚖️50/50',
+                    'snoop': '☎️Call',
+                    'hint': '🔁 Change'
+                }
+            })
+        # query.message.reply_text('Question [%d/10]' % (context.user_data['points']+1))
         get_question_data(query.message, context)
     elif action == 'answer':
-        # query.edit_message_reply_markup()
         query.delete_message()
+        # Answer correct
         if value == context.user_data['correct']:
-            query.message.reply_text('{correct answer %s}' % value)
             context.user_data['points'] += 1
-            if context.user_data['points'] == n_questions:
-                # http://www.unicode.org/emoji/charts/full-emoji-list.html
-                query.message.reply_text(emojize(":party_popper:", use_aliases=True))
-            else:
-                with open(os.path.join(data_folder, 'videos', 'win.mp4'), 'rb') as f:
-                    # TODO: add button "Question [2/10]"
-                    query.message.reply_video(f.read())
 
-                get_question_data(query.message, context)
+            # Final answer
+            if context.user_data['points'] == n_questions:
+
+                keyboard = [[InlineKeyboardButton("Try Again", callback_data='question:start')],
+                            [InlineKeyboardButton("Claim Prize", url='https://hey.reface.ai/hiring/')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                with open(os.path.join(data_folder, 'videos', '10-win.mp4'), 'rb') as f:
+                    query.message.reply_video(f.read(), reply_markup=reply_markup)
+            # Other answer
+            else:
+                if context.user_data['points'] + 1 == n_questions:
+                    keyboard = [[InlineKeyboardButton("Final Question",
+                                                      callback_data='question:next')]]
+                else:
+                    keyboard = [[InlineKeyboardButton("Question [%d/10]" % (context.user_data['points'] + 1),
+                                                      callback_data='question:next')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                with open(os.path.join(data_folder, 'videos', '%d.mp4' % context.user_data['points']), 'rb') as f:
+                    query.message.reply_video(f.read(), reply_markup=reply_markup)
+
+                # with open(os.path.join(data_folder, 'videos', '10-win.mp4'), 'rb') as f:
+                #     query.message.reply_video(f.read())
+
                 # TODO: additional video before question 10
-                # TODO: additional video after final answer
-                # TODO: add message "hiring.reface.ai"
+                # TODO: add message "hiring.reface.ai" with bitly
+        # Answer Wrong
         else:
             with open(os.path.join(data_folder, 'videos', 'wrong.mp4'), 'rb') as f:
-                # TODO: add button "Try Again"
-                keyboard = [[InlineKeyboardButton("Try Again", callback_data='category:fruits')]]
+                keyboard = [[InlineKeyboardButton("Try Again", callback_data='question:start')]]
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup(keyboard))
     elif action == 'help':
         if value == '50':
@@ -124,14 +129,13 @@ def button(update: Update, context: CallbackContext) -> None:
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
         elif value == 'hint':
             context.user_data['hints'].pop('hint')
-            query.edit_message_reply_markup()
+            query.delete_message()
 
             keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
                                              callback_data=f'answer:{option}') for letter, option in
                         context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
-            category_data = questions[context.user_data['category']]
-            with open(category_data[context.user_data['correct']], 'rb') as f:
+            with open(find_image(os.path.join(data_folder, 'countries/images'), context.user_data['correct'], True), 'rb') as f:
                 query.message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
 
     else:
@@ -141,7 +145,8 @@ def button(update: Update, context: CallbackContext) -> None:
 def get_question_data(message, context):
     choices = random.choice(questions)
     correct = choices[0]
-    options = [correct, *random.choices(choices[1:])]
+    print(correct)
+    options = [correct, *random.sample(choices[1:], k=3)][:4]
     random.shuffle(options)
 
     context.user_data.update({
@@ -152,7 +157,7 @@ def get_question_data(message, context):
                                      callback_data=f'answer:{option}') for letter, option in context.user_data['options']]
     hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
 
-    with open(find_image(os.path.join(data_folder, 'countries/images'), correct), 'rb') as f:
+    with open(find_image(os.path.join(data_folder, 'countries/images'), context.user_data['correct']), 'rb') as f:
         message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
 
 
