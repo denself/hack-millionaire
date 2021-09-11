@@ -97,9 +97,27 @@ def button(update: Update, context: CallbackContext) -> None:
             options = []
             while context.user_data['correct'] not in options:
                 options = random.sample(context.user_data['options'], 2)
-            keyboard = [[InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}')] for option in options]
+            context.user_data['options'] = options
+            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
-            query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([keyboard, hints]))
+            query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([keyboard[:1], keyboard[1:], hints]))
+        elif value == 'snoop':
+            context.user_data['hints'].pop('snoop')
+            query.edit_message_reply_markup()
+            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
+            hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
+            with open('snoop_zvonok.mp4', 'rb') as f:
+                query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
+        elif value == 'hint':
+            context.user_data['hints'].pop('hint')
+            query.edit_message_reply_markup()
+
+            keyboard = [InlineKeyboardButton(option.capitalize(), callback_data=f'answer:{option}') for option in context.user_data['options']]
+            hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
+            category_data = questions[context.user_data['category']]
+            with open(category_data[context.user_data['correct']], 'rb') as f:
+                query.message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
+
     else:
         query.message.reply_text('Wrong action')
 
