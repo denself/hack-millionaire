@@ -26,7 +26,7 @@ questions = {}
 for folder in os.listdir(data_folder):
     questions[folder] = {}
     for filename in os.listdir(os.path.join(data_folder, folder)):
-        questions[folder][filename.split()[0]] = os.path.join(data_folder, folder, filename)
+        questions[folder][filename.rsplit( ".", 1 )[ 0 ]] = os.path.join(data_folder, folder, filename)
 
 
 def start(update: Update, context: CallbackContext) -> None:
