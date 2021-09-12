@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # pylint: disable=C0116,W0613
 # This program is dedicated to the public domain under the CC0 license.
 
@@ -15,7 +15,7 @@ from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, CallbackQuery
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
-from file_utils import find_image
+from file_utils import find_image, find_hint
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -26,9 +26,6 @@ j = None
 data_folder = 'data/'
 n_questions = 10
 snoop_tresh = 0.8
-
-with open(os.path.join(data_folder, 'countries', 'questions.csv')) as f:
-    questions = list(csv.reader(f, delimiter='\t'))
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -52,10 +49,11 @@ def button(update: Update, context: CallbackContext) -> None:
         query.delete_message()
         if value == 'start':
             context.user_data.update({
-                'username': query.message.from_user.username,
+                'username': query.message.chat.username,
                 'points': 0,
                 'options': None,
                 'correct': None,
+                'cache': set(),
                 'hints': {
                     '50': '⚖️50/50',
                     'snoop': '☎️Call',
@@ -74,10 +72,11 @@ def button(update: Update, context: CallbackContext) -> None:
             if context.user_data['points'] == n_questions:
 
                 keyboard = [[InlineKeyboardButton("Try Again", callback_data='question:start')],
-                            [InlineKeyboardButton("Claim Prize", url='https://hey.reface.ai/hiring/')]]
+                            [InlineKeyboardButton("Claim Prize", url='https://bit.ly/wwh-prize')]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 with open(os.path.join(data_folder, 'videos', '10-win.mp4'), 'rb') as f:
                     query.message.reply_video(f.read(), reply_markup=reply_markup)
+                logger.info("%s %s:%s %s" % (query.message.chat.username, action, context.user_data['points'], 'win'))
             # Other answer
             else:
                 if context.user_data['points'] + 1 == n_questions:
@@ -89,18 +88,16 @@ def button(update: Update, context: CallbackContext) -> None:
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 with open(os.path.join(data_folder, 'videos', '%d.mp4' % context.user_data['points']), 'rb') as f:
                     query.message.reply_video(f.read(), reply_markup=reply_markup)
+                logger.info("%s %s:%s %s" % (query.message.chat.username, action, context.user_data['points'], 'correct'))
 
-                # with open(os.path.join(data_folder, 'videos', '10-win.mp4'), 'rb') as f:
-                #     query.message.reply_video(f.read())
-
-                # TODO: additional video before question 10
-                # TODO: add message "hiring.reface.ai" with bitly
         # Answer Wrong
         else:
-            with open(os.path.join(data_folder, 'videos', 'wrong.mp4'), 'rb') as f:
+            with open(os.path.join(data_folder, 'videos', '11-wrong.mp4'), 'rb') as f:
                 keyboard = [[InlineKeyboardButton("Try Again", callback_data='question:start')]]
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup(keyboard))
+            logger.info("%s %s:%s %s" % (query.message.chat.username, action, context.user_data['points'], 'lose'))
     elif action == 'help':
+        logger.info("%s %s:%s:%s" % (query.message.chat.username, action, value, context.user_data['points']))
         if value == '50':
             context.user_data['hints'].pop('50')
             options = [[None]]
@@ -118,14 +115,16 @@ def button(update: Update, context: CallbackContext) -> None:
 
             weights = [0.8 if v == context.user_data['correct'] else 0.1 for k, v in context.user_data['options']]
             hint = random.choices(context.user_data['options'], weights)[0][0]
-            video_name = f'{hint.capitalize()}.mp4'
+            video_name = dict(context.user_data['options'])[hint]
 
             keyboard = [InlineKeyboardButton(letter.capitalize() + '. ' + option.capitalize(),
                                              callback_data=f'answer:{option}') for letter, option in
                         context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
             # hint_name = os.listdir(os.path.join(data_folder, 'hints', 'abcd'))
-            with open(os.path.join(data_folder, 'hints', 'abcd', video_name), 'rb') as f:
+
+            video_name = find_hint(os.path.join(data_folder, 'countries', 'hints'), video_name, hint)
+            with open(video_name, 'rb') as f:
                 query.message.reply_video(f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
         elif value == 'hint':
             context.user_data['hints'].pop('hint')
@@ -135,17 +134,28 @@ def button(update: Update, context: CallbackContext) -> None:
                                              callback_data=f'answer:{option}') for letter, option in
                         context.user_data['options']]
             hints = [InlineKeyboardButton(value, callback_data=f'help:{key}') for key, value in context.user_data['hints'].items()]
-            with open(find_image(os.path.join(data_folder, 'countries/images'), context.user_data['correct'], True), 'rb') as f:
+            with open(find_image(os.path.join(data_folder, 'countries', 'images'), context.user_data['correct'], True), 'rb') as f:
                 query.message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
 
     else:
+        logger.info("%s %s:%s:%s" % (query.message.chat.username, action, value, context.user_data['points']))
         query.message.reply_text('Wrong action')
 
 
 def get_question_data(message, context):
-    choices = random.choice(questions)
-    correct = choices[0]
-    print(correct)
+    with open(os.path.join(data_folder, 'countries', 'questions.csv')) as f:
+        questions = list(csv.reader(f))
+    for i in range(50):
+        choices = random.choice(list(filter(bool, questions)))
+        correct = choices[0]
+        if correct not in context.user_data['cache'] and \
+                find_image(os.path.join(data_folder, 'countries/images'), correct):
+            context.user_data['cache'].update(correct)
+            break
+        else:
+            logger.warning("%s %s" % (message.chat.username, "could not generate new question"))
+            raise
+
     options = [correct, *random.sample(choices[1:], k=3)][:4]
     random.shuffle(options)
 
@@ -159,6 +169,8 @@ def get_question_data(message, context):
 
     with open(find_image(os.path.join(data_folder, 'countries/images'), context.user_data['correct']), 'rb') as f:
         message.reply_photo(photo=f.read(), reply_markup=InlineKeyboardMarkup([keyboard[:2], keyboard[2:], hints]))
+
+    logger.info("%s %s:%s %s" % (message.chat.username, 'question', 'next', correct))
 
 
 def help_command(update: Update, context: CallbackContext) -> None:
